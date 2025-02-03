@@ -39,6 +39,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
   const [contributorsBySkill, setContributorsBySkill] = useState<Record<string, any[]>>({});
   const [pendingChanges, setPendingChanges] = useState<Record<string, { added: Set<number>, removed: Set<number> }>>({});
   const [newComponent, setNewComponent] = useState<{ 
+    projectId: string | null,
     skillId: string, 
     estimatedWeeks: string,
     name: string 
@@ -293,7 +294,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
       const scheduledWeeks = component.assigned_weeks;
       const percentage = (scheduledWeeks / component.estimated_weeks) * 100;
       return {
-        name: component.component_name,
+        name: skills[component.skill_id] || 'Unknown Skill',
         engineer: component.contributor_name,
         scheduledWeeks,
         estimatedWeeks: component.estimated_weeks,
@@ -573,8 +574,6 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
                               >
                                 <span className="font-medium">{component.name}</span>
                                 <span className="text-gray-600">•</span>
-                                <span>{component.engineer}</span>
-                                <span className="text-gray-600">•</span>
                                 <span>{component.scheduledWeeks}/{component.estimatedWeeks}w</span>
                               </div>
                             ))}
@@ -724,7 +723,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
                       ))}
                       <tr className="border-b">
                         <td colSpan={15} className="py-2 px-4">
-                          {newComponent ? (
+                          {newComponent?.projectId === project.project_id ? (
                             <div className="flex items-center gap-2">
                               <Input
                                 placeholder="Component name"
@@ -792,6 +791,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
                               variant="ghost"
                               size="sm"
                               onClick={() => setNewComponent({ 
+                                projectId: project.project_id,
                                 skillId: '', 
                                 estimatedWeeks: '',
                                 name: '' 

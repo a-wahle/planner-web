@@ -533,7 +533,7 @@ const App = () => {
                   selectedPeriod={selectedPeriod}
                 />
               ) : (
-                <EngineerView />
+                <EngineerView periodId={selectedPeriod} />
               )}
             </CardContent>
           </Card>
