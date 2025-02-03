@@ -2,12 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { Calendar, Plus } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import ViewComponent from '@/components/view-tab/ViewComponent';
 import EngineerView from '@/components/view-tab/EngineerView';
@@ -15,12 +14,23 @@ import CreateForms from '@/components/create-tab/CreateForms';
 
 const BACKEND_URL = 'http://127.0.0.1:5000';
 
+// Add interfaces for better type safety
+interface Period {
+  period_id: number;
+  name: string;
+}
+
+interface Skill {
+  skill_id: number;
+  name: string;
+}
+
 const App = () => {
   const [formType, setFormType] = useState('period');
-  const [skills, setSkills] = useState([]);
-  const [periods, setPeriods] = useState([]);
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [formData, setFormData] = useState({
     period: { startDate: '', endDate: '', name: '' },
@@ -30,7 +40,7 @@ const App = () => {
       periodId: '', 
       components: [] as Array<{ skillId: string, estimatedWeeks: string }>
     },
-    contributor: { firstName: '', lastName: '', skillIds: [] }
+    contributor: { firstName: '', lastName: '', skillIds: [] as number[] }
   });
   const [activeTab, setActiveTab] = useState('form');
   const [activeViewTab, setActiveViewTab] = useState('projects');
@@ -78,8 +88,9 @@ const App = () => {
         if (!response.ok) throw new Error('Failed to fetch skills');
         const data = await response.json();
         setSkills(data);
-      } catch (error) {
-        setError(error.message);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+        setError(errorMessage);
         console.error('Error fetching skills:', error);
       } finally {
         setLoading(false);
@@ -99,11 +110,13 @@ const App = () => {
         
         // Get saved period from localStorage or use first period
         const savedPeriod = localStorage.getItem('selectedPeriod');
-        if (savedPeriod && data.some(p => p.period_id.toString() === savedPeriod)) {
+        if (savedPeriod && data.some((p: { period_id: number }) => p.period_id.toString() === savedPeriod)) {
           setSelectedPeriod(savedPeriod);
         } else if (data.length > 0) {
           setSelectedPeriod(data[0].period_id.toString());
           localStorage.setItem('selectedPeriod', data[0].period_id.toString());
+        } else {
+          setSelectedPeriod(null);
         }
       } catch (err) {
         console.error('Error fetching periods:', err);
@@ -123,7 +136,7 @@ const App = () => {
     }
   }, [selectedPeriod]);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent<Element>) => {
     e.preventDefault();
     setSuccessMessage('');
     setError(null);
@@ -204,9 +217,9 @@ const App = () => {
           contributor: { firstName: '', lastName: '', skillIds: [] }
         });
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error creating resource:', error);
-      setError(error.message);
+      setError(error instanceof Error ? error.message : 'An unknown error occurred');
       setSuccessMessage('');
     }
   };
@@ -278,7 +291,7 @@ const App = () => {
               <Label htmlFor="periodSelect">Select Period</Label>
               <Select
                 value={formData.project.periodId}
-                onValueChange={(value) => setFormData({
+                onValueChange={(value: string) => setFormData({
                   ...formData,
                   project: {...formData.project, periodId: value}
                 })}
@@ -399,7 +412,7 @@ const App = () => {
               <Input
                 id="firstName"
                 value={formData.contributor.firstName}
-                onChange={(e) => setFormData({
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({
                   ...formData,
                   contributor: {...formData.contributor, firstName: e.target.value}
                 })}
@@ -424,7 +437,7 @@ const App = () => {
                     <input
                       type="checkbox"
                       checked={formData.contributor.skillIds.includes(skill.skill_id)}
-                      onChange={(e) => {
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                         const updatedSkills = e.target.checked
                           ? [...formData.contributor.skillIds, skill.skill_id]
                           : formData.contributor.skillIds.filter(id => id !== skill.skill_id);
@@ -508,7 +521,7 @@ const App = () => {
                 </div>
                 <div className="w-[200px]">
                   <Select
-                    value={selectedPeriod}
+                    value={selectedPeriod || undefined}
                     onValueChange={setSelectedPeriod}
                   >
                     <SelectTrigger>
@@ -528,8 +541,6 @@ const App = () => {
             <CardContent>
               {activeViewTab === 'projects' ? (
                 <ViewComponent 
-                  activeViewTab={activeViewTab} 
-                  setActiveViewTab={setActiveViewTab}
                   selectedPeriod={selectedPeriod}
                 />
               ) : (

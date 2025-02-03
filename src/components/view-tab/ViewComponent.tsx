@@ -1,15 +1,12 @@
 "use client"
 
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight, MoreHorizontal, Trash2, Plus } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
+import { ChevronDown, ChevronRight, Trash2, MoreVertical } from 'lucide-react';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover"
-import { Input } from "@/components/ui/input";
+} from "@/components/ui/popover";
 
 // Move getStatusColor outside of the component
 const getStatusColor = (percentage: number) => {
@@ -19,24 +16,52 @@ const getStatusColor = (percentage: number) => {
   return 'bg-green-100 text-green-800';
 };
 
+interface Project {
+  project_id: number;
+  project_name: string;
+  components: Array<{
+    component_id: string;
+    component_name: string;
+    skill_id: string;
+    contributor_id: string | null;
+    contributor_name: string | null;
+    estimated_weeks: number;
+    assigned_weeks: number;
+    assignments: boolean[];
+  }>;
+}
+
+interface ProjectData {
+  projects: Project[];
+}
+
 interface ViewComponentProps {
-  activeViewTab: string;
-  setActiveViewTab: (tab: string) => void;
   selectedPeriod: string | null;
 }
 
-const ViewComponent: React.FC<ViewComponentProps> = ({ 
-  activeViewTab, 
-  setActiveViewTab,
-  selectedPeriod 
-}) => {
-  const [selectedCells, setSelectedCells] = useState(new Set());
+// Define a type for the contributor skill mapping
+type ContributorSkillMap = Record<string, Array<{
+  contributor_id: number;
+  first_name: string;
+  last_name: string;
+}>>;
+
+// Add new interface for skill data
+interface SkillData {
+  skill_id: string;
+  name: string;
+}
+
+// Add type for skill map
+type SkillMap = Record<string, string>;
+
+/* eslint-disable @typescript-eslint/no-unused-vars */
+const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.ReactElement => {
   const [expandedProjects, setExpandedProjects] = useState(new Set());
-  const [projectData, setProjectData] = useState({ projects: [] });
-  const [error, setError] = useState(null);
+  const [projectData, setProjectData] = useState<ProjectData>({ projects: [] });
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [periods, setPeriods] = useState([]);
-  const [contributorsBySkill, setContributorsBySkill] = useState<Record<string, any[]>>({});
+  const [contributorsBySkill, setContributorsBySkill] = useState<ContributorSkillMap>({});
   const [pendingChanges, setPendingChanges] = useState<Record<string, { added: Set<number>, removed: Set<number> }>>({});
   const [newComponent, setNewComponent] = useState<{ 
     projectId: string | null,
@@ -54,10 +79,9 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
         if (!response.ok) {
           throw new Error('Failed to fetch periods');
         }
-        const data = await response.json();
-        setPeriods(data);
-      } catch (err) {
-        console.error('Error fetching periods:', err);
+        await response.json();
+      } catch (error) {
+        console.error('Error fetching periods:', error);
         setError('Failed to load periods');
       }
     };
@@ -125,7 +149,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
   }, [selectedPeriod]);
 
   // Fetch contributors when a new skill_id is encountered
-  const fetchContributorsForSkill = async (skillId: string) => {
+  const fetchContributorsForSkill = React.useCallback(async (skillId: string) => {
     if (!skillId || contributorsBySkill[skillId]) return;
 
     try {
@@ -136,10 +160,11 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
         ...prev,
         [skillId]: data.contributors
       }));
-    } catch (err) {
+    } catch (error) {
+      console.error('Error fetching contributors:', error);
       setError('Failed to load contributors');
     }
-  };
+  }, [contributorsBySkill]);
 
   // Fetch contributors for all skills in the project data
   useEffect(() => {
@@ -152,7 +177,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
     skillIds.forEach(skillId => {
       if (skillId) fetchContributorsForSkill(skillId);
     });
-  }, [projectData]);
+  }, [projectData, fetchContributorsForSkill]);
 
   // Add new useEffect to fetch skills
   useEffect(() => {
@@ -162,12 +187,12 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
         if (!response.ok) throw new Error('Failed to fetch skills');
         const data = await response.json();
         // Create a mapping of skill_id to skill name
-        const skillMap = data.reduce((acc, skill) => ({
+        const skillMap = data.reduce((acc: SkillMap, skill: SkillData) => ({
           ...acc,
           [skill.skill_id]: skill.name
         }), {});
         setSkills(skillMap);
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Error fetching skills:', error);
         setError('Failed to load skills');
       }
@@ -185,21 +210,18 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
 
   const toggleCell = (componentId: string, weekIndex: number, isAssigned: boolean) => {
     setPendingChanges(prev => {
-      // Create a new copy of the component changes or initialize if not exists
       const componentChanges = {
         added: new Set(prev[componentId]?.added || []),
         removed: new Set(prev[componentId]?.removed || [])
       };
       
       if (isAssigned) {
-        // Toggle removed status for assigned cells
         if (componentChanges.removed.has(weekIndex)) {
           componentChanges.removed.delete(weekIndex);
         } else {
           componentChanges.removed.add(weekIndex);
         }
       } else {
-        // Toggle added status for unassigned cells
         if (componentChanges.added.has(weekIndex)) {
           componentChanges.added.delete(weekIndex);
         } else {
@@ -207,7 +229,6 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
         }
       }
 
-      // If both sets are empty, remove the component from pendingChanges
       if (componentChanges.added.size === 0 && componentChanges.removed.size === 0) {
         const { [componentId]: _, ...rest } = prev;
         return rest;
@@ -245,23 +266,21 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
         throw new Error(errorData.error || 'Failed to update assignments');
       }
 
-      // Clear pending changes for this component
       setPendingChanges(prev => {
         const newChanges = { ...prev };
         delete newChanges[componentId];
         return newChanges;
       });
 
-      // Refresh project data
       const refreshResponse = await fetch(`http://127.0.0.1:5000/period/${selectedPeriod}/projects`);
       if (!refreshResponse.ok) {
         throw new Error('Failed to refresh projects');
       }
       const data = await refreshResponse.json();
       setProjectData(data);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error updating assignments:', error);
-      setError(error.message);
+      setError(error instanceof Error ? error.message : 'An unknown error occurred');
     }
   };
 
@@ -285,11 +304,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
     }
   };
 
-  const isCellSelected = (componentId, weekIndex) => {
-    return selectedCells.has(`${componentId}-${weekIndex}`);
-  };
-
-  const getProjectSummary = (project) => {
+  const getProjectSummary = (project: Project) => {
     const componentSummaries = project.components.map(component => {
       const scheduledWeeks = component.assigned_weeks;
       const percentage = (scheduledWeeks / component.estimated_weeks) * 100;
@@ -302,10 +317,10 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
       };
     });
 
-    const totalScheduledWeeks = project.components.reduce((sum, component) => 
-      sum + component.assigned_weeks, 0);
-    const totalEstimatedWeeks = project.components.reduce((sum, component) => 
-      sum + component.estimated_weeks, 0);
+    const totalScheduledWeeks = project.components.reduce((acc: number, component) => 
+      acc + component.assigned_weeks, 0);
+    const totalEstimatedWeeks = project.components.reduce((acc: number, component) => 
+      acc + component.estimated_weeks, 0);
     const scheduledPercentage = totalEstimatedWeeks > 0 ? (totalScheduledWeeks / totalEstimatedWeeks) * 100 : 0;
 
     return {
@@ -335,9 +350,9 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
       }
       const data = await refreshResponse.json();
       setProjectData(data);
-    } catch (err) {
+    } catch (error: unknown) {
       setError('Failed to clear assignments. Please try again.');
-      console.error('Error clearing assignments:', err);
+      console.error('Error clearing assignments:', error);
     }
   };
 
@@ -362,6 +377,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
       const data = await refreshResponse.json();
       setProjectData(data);
     } catch (err) {
+      console.error('Error assigning contributor:', err);
       setError('Failed to assign contributor. Please try again.');
     }
   };
@@ -384,9 +400,9 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
       }
       const data = await refreshResponse.json();
       setProjectData(data);
-    } catch (err) {
+    } catch (error: unknown) {
       setError('Failed to delete component. Please try again.');
-      console.error('Error deleting component:', err);
+      console.error('Error deleting component:', error);
     }
   };
 
@@ -491,9 +507,14 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
       setError('Failed to update estimated weeks. Please try again.');
     }
   };
+  /* eslint-enable @typescript-eslint/no-unused-vars */
 
   if (loading) {
-    return <div className="flex justify-center items-center min-h-screen">Loading projects...</div>;
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        Loading projects...
+      </div>
+    );
   }
 
   return (
@@ -507,7 +528,9 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
         <table className="w-full border-collapse min-w-max">
           <thead>
             <tr className="bg-gray-50 border-b">
-              <th className="text-left py-4 px-4 font-medium text-sm text-gray-500 w-64 sticky left-0 bg-gray-50">Project / Component</th>
+              <th className="text-left py-4 px-4 font-medium text-sm text-gray-500 w-64 sticky left-0 bg-gray-50">
+                Project / Component
+              </th>
               {expandedProjects.size > 0 && (
                 <>
                   <th className="text-left py-4 px-4 font-medium text-sm text-gray-500 w-20">Weeks</th>
@@ -524,287 +547,199 @@ const ViewComponent: React.FC<ViewComponentProps> = ({
           </thead>
           <tbody>
             {projectData.projects.map((project) => {
-              const summary = getProjectSummary(project);
               const isExpanded = expandedProjects.has(project.project_id);
+              const summary = getProjectSummary(project);
               
               return (
                 <React.Fragment key={project.project_id}>
-                  <tr 
-                    className="border-b hover:bg-gray-50 cursor-pointer"
-                    onClick={() => toggleProject(project.project_id)}
-                  >
-                    {!isExpanded ? (
-                      <td className="py-4 px-4 sticky left-0 bg-white" colSpan={15}>
-                        <div className="flex items-center gap-6">
-                          <div className="flex items-center font-medium min-w-64">
-                            <ChevronRight className="w-4 h-4 mr-2" />
+                  <tr className="border-b hover:bg-gray-50 cursor-pointer">
+                    <td className="py-4 px-4 sticky left-0 bg-white" colSpan={expandedProjects.size > 0 ? dateHeaders.length + 4 : 1}>
+                      <div className="flex items-center gap-6">
+                        <div className="flex items-center font-medium min-w-64">
+                          <div 
+                            className="flex items-center cursor-pointer"
+                            onClick={() => toggleProject(project.project_id)}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4 mr-2" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 mr-2" />
+                            )}
                             {project.project_name}
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="ml-2 hover:bg-gray-100"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent 
-                                className="w-40 p-0"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => deleteProject(String(project.project_id))}
-                                  className="w-full justify-start px-3 py-2 text-red-600 hover:text-red-600 hover:bg-red-50"
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete
-                                </Button>
-                              </PopoverContent>
-                            </Popover>
                           </div>
-                          <div className="flex gap-4">
-                            {summary.componentSummaries.map((component, index) => (
-                              <div 
-                                key={index} 
-                                className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs ${component.statusColor}`}
-                              >
-                                <span className="font-medium">{component.name}</span>
-                                <span className="text-gray-600">•</span>
-                                <span>{component.scheduledWeeks}/{component.estimatedWeeks}w</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </td>
-                    ) : (
-                      <>
-                        <td className="py-4 px-4 font-medium sticky left-0 bg-white flex items-center">
-                          <ChevronDown className="w-4 h-4 mr-2" />
-                          {project.project_name}
                           <Popover>
                             <PopoverTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="ml-2 hover:bg-gray-100"
+                              <button 
+                                className="ml-2 p-1 hover:bg-gray-100 rounded"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
+                                <MoreVertical className="w-4 h-4 text-gray-500" />
+                              </button>
                             </PopoverTrigger>
-                            <PopoverContent 
-                              className="w-40 p-0"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => deleteProject(String(project.project_id))}
-                                className="w-full justify-start px-3 py-2 text-red-600 hover:text-red-600 hover:bg-red-50"
+                            <PopoverContent className="w-40 p-0" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100 flex items-center gap-2"
+                                onClick={() => deleteProject(project.project_id.toString())}
                               >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete
-                              </Button>
+                                <Trash2 className="w-4 h-4" />
+                                Delete Project
+                              </button>
                             </PopoverContent>
                           </Popover>
-                        </td>
-                        <td colSpan={14}></td>
-                      </>
-                    )}
+                        </div>
+                        {!isExpanded && (
+                          <div className="flex gap-4 text-sm">
+                            {summary.componentSummaries.map((compSummary, index) => (
+                              <div key={index} className="flex items-center gap-2">
+                                <span className="px-2 py-1 rounded bg-gray-100">
+                                  {compSummary.name}
+                                </span>
+                                <span className="px-2 py-1 rounded bg-gray-100">
+                                  {compSummary.engineer || 'Unassigned'}
+                                </span>
+                                <span className={`px-2 py-1 rounded ${compSummary.statusColor}`}>
+                                  {compSummary.scheduledWeeks}/{compSummary.estimatedWeeks}
+                                </span>
+                              </div>
+                            ))}
+                            <span className={`px-2 py-1 rounded ${summary.statusColor}`}>
+                              {Math.round(summary.percentage)}%
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </td>
                   </tr>
-                  {isExpanded && (
-                    <>
-                      {project.components.map((component) => (
-                        <tr key={component.component_id} className="border-b hover:bg-gray-50 bg-gray-50/50">
-                          <td className="py-4 px-4 pl-10 sticky left-0 bg-gray-50/50">
-                            {component.component_name}
-                          </td>
-                          <td className="py-4 px-4">
-                            <Input
+                  {isExpanded && project.components.map((component) => (
+                    <tr key={component.component_id} className="border-b">
+                      <td className="py-4 px-4 pl-12 sticky left-0 bg-white">
+                        {component.component_name}
+                      </td>
+                      {expandedProjects.size > 0 && (
+                        <>
+                          <td className="text-center py-4 px-4">
+                            <input
                               type="number"
-                              min="1"
+                              className="w-16 px-2 py-1 border rounded text-center"
                               value={component.estimated_weeks}
-                              className="w-20"
-                              onChange={(e) => {
-                                const newValue = parseInt(e.target.value);
-                                if (newValue > 0) {
-                                  updateEstimatedWeeks(component.component_id, newValue);
-                                }
-                              }}
+                              onChange={(e) => updateEstimatedWeeks(component.component_id, parseInt(e.target.value))}
                             />
                           </td>
                           <td className="py-4 px-4">
                             <div className="flex items-center gap-2">
-                              <Select
-                                value={component.contributor_id || "unassigned"}
-                                onValueChange={(value) => assignContributor(component.component_id, value)}
+                              <select
+                                className="px-2 py-1 border rounded min-w-[150px]"
+                                value={component.contributor_id || 'unassigned'}
+                                onChange={(e) => assignContributor(component.component_id, e.target.value)}
                               >
-                                <SelectTrigger className="w-[200px]">
-                                  <SelectValue placeholder="Select engineer" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="unassigned">Unassigned</SelectItem>
-                                  {component.skill_id && contributorsBySkill[component.skill_id]?.map((contributor) => (
-                                    <SelectItem 
-                                      key={contributor.contributor_id} 
-                                      value={contributor.contributor_id.toString()}
+                                <option value="unassigned">Unassigned</option>
+                                {contributorsBySkill[component.skill_id]?.map((contributor) => (
+                                  <option key={contributor.contributor_id} value={contributor.contributor_id}>
+                                    {contributor.first_name} {contributor.last_name}
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="w-[80px]">
+                                {component.contributor_id && (
+                                  pendingChanges[component.component_id] ? (
+                                    <button
+                                      onClick={() => submitChanges(component.component_id, component.contributor_id)}
+                                      className="px-2 py-1 bg-blue-500 text-white rounded text-sm w-full"
                                     >
-                                      {`${contributor.first_name} ${contributor.last_name}`}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              {component.contributor_id && (
-                                pendingChanges[component.component_id] && 
-                                (pendingChanges[component.component_id].added.size > 0 || 
-                                 pendingChanges[component.component_id].removed.size > 0) ? (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => submitChanges(component.component_id, component.contributor_id)}
-                                    className="text-blue-500 hover:text-blue-700 hover:bg-blue-100 p-0 h-auto font-normal"
-                                  >
-                                    Submit
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      clearAssignments(component.component_id);
-                                    }}
-                                    className="text-blue-500 hover:text-blue-700 hover:bg-blue-100 p-0 h-auto font-normal"
-                                  >
-                                    Clear
-                                  </Button>
-                                )
-                              )}
+                                      Submit
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => clearAssignments(component.component_id)}
+                                      className="px-2 py-1 bg-red-500 text-white rounded text-sm w-full"
+                                    >
+                                      Clear
+                                    </button>
+                                  )
+                                )}
+                              </div>
                             </div>
                           </td>
-                          {component.assignments.map((assigned, weekIndex) => (
+                          {component.assignments.map((isAssigned, index) => (
                             <td 
-                              key={weekIndex} 
-                              className={`text-center p-0 cursor-pointer border border-gray-100 ${
-                                pendingChanges[component.component_id]?.added.has(weekIndex) ? 'bg-blue-200' :
-                                pendingChanges[component.component_id]?.removed.has(weekIndex) ? 'bg-red-200' :
-                                assigned ? 'bg-green-500' : ''
+                              key={index} 
+                              className={`text-center py-4 px-2 cursor-pointer ${
+                                pendingChanges[component.component_id]?.removed.has(index) ? 'bg-red-100' :
+                                pendingChanges[component.component_id]?.added.has(index) ? 'bg-green-100' :
+                                isAssigned ? 'bg-gray-100' : ''
                               }`}
-                              onClick={() => toggleCell(component.component_id, weekIndex, assigned)}
+                              onClick={() => toggleCell(component.component_id, index, isAssigned)}
                             >
-                              <div className="w-full h-full p-4 hover:bg-gray-100">
-                              </div>
+                              {isAssigned ? '✓' : ''}
                             </td>
                           ))}
                           <td className="text-center py-4 px-4">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              component.assigned_weeks >= component.estimated_weeks
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {component.assigned_weeks >= component.estimated_weeks ? 'Scheduled' : 'Unassigned'}
-                            </span>
+                            {Math.round((component.assigned_weeks / component.estimated_weeks) * 100)}%
                           </td>
                           <td className="py-4 px-4">
-                            <Button
-                              variant="ghost"
-                              size="icon"
+                            <button
                               onClick={() => deleteComponent(component.component_id)}
-                              className="hover:bg-red-100 hover:text-red-600"
+                              className="p-1 text-gray-500 hover:text-red-500 rounded"
                             >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </td>
-                        </tr>
-                      ))}
-                      <tr className="border-b">
-                        <td colSpan={15} className="py-2 px-4">
-                          {newComponent?.projectId === project.project_id ? (
-                            <div className="flex items-center gap-2">
-                              <Input
-                                placeholder="Component name"
-                                className="w-[300px]"
-                                value={newComponent.name}
-                                onChange={(e) => setNewComponent({
-                                  ...newComponent,
-                                  name: e.target.value
-                                })}
-                              />
-                              <Select
-                                value={newComponent.skillId}
-                                onValueChange={(value) => {
-                                  const defaultName = `${project.project_name} ${skills[value]}`;
-                                  setNewComponent({
-                                    ...newComponent,
-                                    skillId: value,
-                                    name: defaultName
-                                  });
-                                }}
-                              >
-                                <SelectTrigger className="w-[200px]">
-                                  <SelectValue placeholder="Select skill" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {Object.entries(skills).map(([skillId, skillName]) => (
-                                    <SelectItem key={skillId} value={skillId}>
-                                      {skillName}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-
-                              <Input
-                                type="number"
-                                placeholder="Weeks"
-                                className="w-[100px]"
-                                value={newComponent.estimatedWeeks}
-                                onChange={(e) => setNewComponent({
-                                  ...newComponent,
-                                  estimatedWeeks: e.target.value
-                                })}
-                              />
-
-                              <Button
-                                variant="default"
-                                size="sm"
-                                onClick={() => addComponent(String(project.project_id))}
-                                className="bg-blue-500 hover:bg-blue-600 text-white"
-                              >
-                                Add
-                              </Button>
-
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setNewComponent(null)}
-                                className="text-gray-500"
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setNewComponent({ 
-                                projectId: project.project_id,
-                                skillId: '', 
-                                estimatedWeeks: '',
-                                name: '' 
-                              })}
-                              className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                            >
-                              <Plus className="h-4 w-4 mr-2" />
-                              Add Component
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    </>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                  {isExpanded && (
+                    <tr className="border-b bg-gray-50">
+                      <td colSpan={dateHeaders.length + 4} className="py-4 px-4">
+                        <div className="flex items-center gap-4">
+                          <input
+                            type="text"
+                            placeholder="Component Name"
+                            className="px-2 py-1 border rounded"
+                            value={newComponent?.projectId === project.project_id.toString() ? newComponent.name : ''}
+                            onChange={(e) => setNewComponent(prev => ({
+                              projectId: project.project_id.toString(),
+                              name: e.target.value,
+                              skillId: prev?.skillId || '',
+                              estimatedWeeks: prev?.estimatedWeeks || ''
+                            }))}
+                          />
+                          <select
+                            className="px-2 py-1 border rounded"
+                            value={newComponent?.projectId === project.project_id.toString() ? newComponent.skillId : ''}
+                            onChange={(e) => setNewComponent(prev => ({
+                              projectId: project.project_id.toString(),
+                              skillId: e.target.value,
+                              name: prev?.name || '',
+                              estimatedWeeks: prev?.estimatedWeeks || ''
+                            }))}
+                          >
+                            <option value="">Select Skill</option>
+                            {Object.entries(skills).map(([id, name]) => (
+                              <option key={id} value={id}>{name}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            placeholder="Estimated Weeks"
+                            className="px-2 py-1 border rounded w-32"
+                            value={newComponent?.projectId === project.project_id.toString() ? (newComponent.estimatedWeeks || '') : ''}
+                            onChange={(e) => setNewComponent(prev => ({
+                              projectId: project.project_id.toString(),
+                              estimatedWeeks: e.target.value,
+                              name: prev?.name || '',
+                              skillId: prev?.skillId || ''
+                            }))}
+                          />
+                          <button
+                            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                            onClick={() => addComponent(project.project_id.toString())}
+                          >
+                            Add Component
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                   )}
                 </React.Fragment>
               );

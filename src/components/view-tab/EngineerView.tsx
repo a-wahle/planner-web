@@ -1,9 +1,24 @@
 import React, { useEffect, useState } from 'react';
+import styles from './EngineerView.module.css';
 
 const BACKEND_URL = 'http://127.0.0.1:5000';
 
-const EngineerView = ({ periodId }) => {
-  const [engineerData, setEngineerData] = useState({});
+interface EngineerViewProps {
+  periodId: string | null;
+}
+
+interface Engineer {
+  name: string;
+  assignments: string[][];
+  avg?: number;
+}
+
+interface EngineerData {
+  [key: string]: Engineer;
+}
+
+const EngineerView: React.FC<EngineerViewProps> = ({ periodId }) => {
+  const [engineerData, setEngineerData] = useState<EngineerData>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,14 +55,14 @@ const EngineerView = ({ periodId }) => {
     '2/3', '2/10', '2/17', '2/24', '3/3', '3/10', '3/17', '3/24', '3/31', '4/7', '4/14', '4/21'
   ];
 
-  const getCellColor = (value) => {
+  const getCellColor = (value: number): string => {
     if (value === 0) return 'bg-white';
     if (value === 1) return 'bg-green-100';
     if (value === 2) return 'bg-orange-100';
     return 'bg-white';
   };
 
-  const getAvgColor = (value) => {
+  const getAvgColor = (value: number): string => {
     if (value < 0.7) return 'bg-red-100';
     if (value < 0.9) return 'bg-yellow-100';
     return 'bg-green-100';
@@ -55,55 +70,42 @@ const EngineerView = ({ periodId }) => {
 
   return (
     <div className="w-full h-full min-h-screen bg-white p-6">
-      <style jsx>{`
-        [data-tooltip]:hover::before {
-          content: attr(data-tooltip);
-          position: absolute;
-          background: #333;
-          color: white;
-          padding: 4px 8px;
-          border-radius: 4px;
-          font-size: 12px;
-          white-space: pre;
-          z-index: 100;
-          transform: translateY(-100%);
-          margin-top: -8px;
-        }
-      `}</style>
-      <h2 className="text-2xl font-bold mb-6">Engineer Assignments</h2>
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse min-w-max">
-          <thead>
-            <tr className="bg-gray-50 border-b">
-              <th className="text-left py-4 px-4 font-medium text-sm text-gray-500 w-48 sticky left-0 bg-gray-50">Engineer</th>
-              {dates.map((date) => (
-                <th key={date} className="text-center py-4 px-2 font-medium text-sm text-gray-500 w-16">
-                  {date}
-                </th>
-              ))}
-              <th className="text-center py-4 px-4 font-medium text-sm text-gray-500 w-20">Avg</th>
-            </tr>
-          </thead>
-          <tbody>
-            {engineers.map((engineer) => (
-              <tr key={engineer.name} className="border-b">
-                <td className="py-4 px-4 font-medium sticky left-0 bg-white">{engineer.name}</td>
-                {engineer.assignments.map((tasks, index) => (
-                  <td 
-                    key={index} 
-                    className={`text-center py-4 px-2 relative ${getCellColor(tasks.length)}`}
-                    {...(tasks.length > 0 ? { 'data-tooltip': tasks.join('\n') } : {})}
-                  >
-                    {tasks.length}
-                  </td>
+      <div className={styles.tooltipContainer}>
+        <h2 className="text-2xl font-bold mb-6">Engineer Assignments</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse min-w-max">
+            <thead>
+              <tr className="bg-gray-50 border-b">
+                <th className="text-left py-4 px-4 font-medium text-sm text-gray-500 w-48 sticky left-0 bg-gray-50">Engineer</th>
+                {dates.map((date) => (
+                  <th key={date} className="text-center py-4 px-2 font-medium text-sm text-gray-500 w-16">
+                    {date}
+                  </th>
                 ))}
-                <td className={`text-center py-4 px-4 font-medium ${getAvgColor(engineer.avg)}`}>
-                  {engineer.avg}
-                </td>
+                <th className="text-center py-4 px-4 font-medium text-sm text-gray-500 w-20">Avg</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {engineers.map((engineer) => (
+                <tr key={engineer.name} className="border-b">
+                  <td className="py-4 px-4 font-medium sticky left-0 bg-white">{engineer.name}</td>
+                  {engineer.assignments.map((tasks, index) => (
+                    <td 
+                      key={index} 
+                      className={`text-center py-4 px-2 ${getCellColor(tasks.length)}`}
+                      data-tooltip={tasks.join('\n')}
+                    >
+                      {tasks.length}
+                    </td>
+                  ))}
+                  <td className={`text-center py-4 px-4 ${getAvgColor(engineer.avg || 0)}`}>
+                    {engineer.avg}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

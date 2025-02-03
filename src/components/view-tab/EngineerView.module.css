@@ -1,0 +1,13 @@
+.tooltipContainer [data-tooltip]:hover::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  background: #333;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: pre;
+  z-index: 100;
+  transform: translateY(-100%);
+  margin-top: -8px;
+} 
