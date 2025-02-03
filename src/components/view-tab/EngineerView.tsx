@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import styles from './EngineerView.module.css';
 
-const BACKEND_URL = 'http://127.0.0.1:5000';
+const BACKEND_URL = 'https://planner-backend-fz01.onrender.com';
 
 interface EngineerViewProps {
   periodId: string | null;

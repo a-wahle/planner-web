@@ -12,7 +12,7 @@ import ViewComponent from '@/components/view-tab/ViewComponent';
 import EngineerView from '@/components/view-tab/EngineerView';
 import CreateForms from '@/components/create-tab/CreateForms';
 
-const BACKEND_URL = 'http://127.0.0.1:5000';
+const BACKEND_URL = 'https://planner-backend-fz01.onrender.com';
 
 // Add interfaces for better type safety
 interface Period {

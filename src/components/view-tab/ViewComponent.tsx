@@ -8,6 +8,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
+const BACKEND_URL = 'https://planner-backend-fz01.onrender.com';
+
 // Move getStatusColor outside of the component
 const getStatusColor = (percentage: number) => {
   if (percentage === 0) return 'bg-red-100 text-red-800';
@@ -75,7 +77,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
   useEffect(() => {
     const fetchPeriods = async () => {
       try {
-        const response = await fetch('http://127.0.0.1:5000/periods');
+        const response = await fetch(`${BACKEND_URL}/periods`);
         if (!response.ok) {
           throw new Error('Failed to fetch periods');
         }
@@ -130,7 +132,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
       
       try {
         setLoading(true);
-        const response = await fetch(`http://127.0.0.1:5000/period/${selectedPeriod}/projects`);
+        const response = await fetch(`${BACKEND_URL}/period/${selectedPeriod}/projects`);
         if (!response.ok) {
           throw new Error('Failed to fetch projects');
         }
@@ -153,7 +155,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
     if (!skillId || contributorsBySkill[skillId]) return;
 
     try {
-      const response = await fetch(`http://127.0.0.1:5000/contributors/get_contributors_by_skill/${skillId}`);
+      const response = await fetch(`${BACKEND_URL}/contributors/get_contributors_by_skill/${skillId}`);
       if (!response.ok) throw new Error('Failed to fetch contributors');
       const data = await response.json();
       setContributorsBySkill(prev => ({
@@ -183,7 +185,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
   useEffect(() => {
     const fetchSkills = async () => {
       try {
-        const response = await fetch('http://127.0.0.1:5000/skills');
+        const response = await fetch(`${BACKEND_URL}/skills`);
         if (!response.ok) throw new Error('Failed to fetch skills');
         const data = await response.json();
         // Create a mapping of skill_id to skill name
@@ -248,7 +250,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
       setError(null);
       const changes = pendingChanges[componentId] || { added: new Set(), removed: new Set() };
       
-      const response = await fetch('http://127.0.0.1:5000/assignment', {
+      const response = await fetch(`${BACKEND_URL}/assignment`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -272,7 +274,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
         return newChanges;
       });
 
-      const refreshResponse = await fetch(`http://127.0.0.1:5000/period/${selectedPeriod}/projects`);
+      const refreshResponse = await fetch(`${BACKEND_URL}/period/${selectedPeriod}/projects`);
       if (!refreshResponse.ok) {
         throw new Error('Failed to refresh projects');
       }
@@ -335,7 +337,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
   const clearAssignments = async (componentId: string) => {
     try {
       setError(null);
-      const response = await fetch(`http://127.0.0.1:5000/component/${componentId}/assignments`, {
+      const response = await fetch(`${BACKEND_URL}/component/${componentId}/assignments`, {
         method: 'DELETE',
       });
 
@@ -344,7 +346,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
       }
 
       // Refresh project data after successful deletion
-      const refreshResponse = await fetch(`http://127.0.0.1:5000/period/${selectedPeriod}/projects`);
+      const refreshResponse = await fetch(`${BACKEND_URL}/period/${selectedPeriod}/projects`);
       if (!refreshResponse.ok) {
         throw new Error('Failed to refresh projects');
       }
@@ -359,7 +361,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
   const assignContributor = async (componentId: string, contributorId: string) => {
     try {
       setError(null);
-      const response = await fetch(`http://127.0.0.1:5000/component/${componentId}/assign_contributor`, {
+      const response = await fetch(`${BACKEND_URL}/component/${componentId}/assign_contributor`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -372,7 +374,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
       if (!response.ok) throw new Error('Failed to assign contributor');
 
       // Refresh project data
-      const refreshResponse = await fetch(`http://127.0.0.1:5000/period/${selectedPeriod}/projects`);
+      const refreshResponse = await fetch(`${BACKEND_URL}/period/${selectedPeriod}/projects`);
       if (!refreshResponse.ok) throw new Error('Failed to refresh projects');
       const data = await refreshResponse.json();
       setProjectData(data);
@@ -385,7 +387,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
   const deleteComponent = async (componentId: string) => {
     try {
       setError(null);
-      const response = await fetch(`http://127.0.0.1:5000/component/${componentId}`, {
+      const response = await fetch(`${BACKEND_URL}/component/${componentId}`, {
         method: 'DELETE',
       });
 
@@ -394,7 +396,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
       }
 
       // Refresh project data after successful deletion
-      const refreshResponse = await fetch(`http://127.0.0.1:5000/period/${selectedPeriod}/projects`);
+      const refreshResponse = await fetch(`${BACKEND_URL}/period/${selectedPeriod}/projects`);
       if (!refreshResponse.ok) {
         throw new Error('Failed to refresh projects');
       }
@@ -410,7 +412,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
   const deleteProject = async (projectId: string) => {
     try {
       setError(null);
-      const response = await fetch(`http://127.0.0.1:5000/project/${projectId}`, {
+      const response = await fetch(`${BACKEND_URL}/project/${projectId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -423,7 +425,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
       }
 
       // Refresh project data after successful deletion
-      const refreshResponse = await fetch(`http://127.0.0.1:5000/period/${selectedPeriod}/projects`);
+      const refreshResponse = await fetch(`${BACKEND_URL}/period/${selectedPeriod}/projects`);
       if (!refreshResponse.ok) {
         throw new Error('Failed to refresh projects');
       }
@@ -443,7 +445,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
       }
 
       setError(null);
-      const response = await fetch('http://127.0.0.1:5000/component', {
+      const response = await fetch(`${BACKEND_URL}/component`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -465,7 +467,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
       setNewComponent(null);
 
       // Refresh project data
-      const refreshResponse = await fetch(`http://127.0.0.1:5000/period/${selectedPeriod}/projects`);
+      const refreshResponse = await fetch(`${BACKEND_URL}/period/${selectedPeriod}/projects`);
       if (!refreshResponse.ok) {
         throw new Error('Failed to refresh projects');
       }
@@ -481,7 +483,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
   const updateEstimatedWeeks = async (componentId: string, weeks: number) => {
     try {
       setError(null);
-      const response = await fetch(`http://127.0.0.1:5000/component/${componentId}/estimated_weeks`, {
+      const response = await fetch(`${BACKEND_URL}/component/${componentId}/estimated_weeks`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -496,7 +498,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
       }
 
       // Refresh project data
-      const refreshResponse = await fetch(`http://127.0.0.1:5000/period/${selectedPeriod}/projects`);
+      const refreshResponse = await fetch(`${BACKEND_URL}/period/${selectedPeriod}/projects`);
       if (!refreshResponse.ok) {
         throw new Error('Failed to refresh projects');
       }
@@ -552,7 +554,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
               
               return (
                 <React.Fragment key={project.project_id}>
-                  <tr className="border-b hover:bg-gray-50 cursor-pointer">
+                  <tr className="border-b hover:bg-gray-50">
                     <td className="py-4 px-4 sticky left-0 bg-white" colSpan={expandedProjects.size > 0 ? dateHeaders.length + 4 : 1}>
                       <div className="flex items-center gap-6">
                         <div className="flex items-center font-medium min-w-64">
