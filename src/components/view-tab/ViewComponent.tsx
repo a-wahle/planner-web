@@ -127,27 +127,69 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
 
   // Fetch project data when selected period changes
   useEffect(() => {
-    const fetchProjectData = async () => {
-      if (!selectedPeriod) return;
-      
+    const fetchSkills = async () => {
       try {
-        setLoading(true);
-        const response = await fetch(`${BACKEND_URL}/period/${selectedPeriod}/projects`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch projects');
-        }
+        const response = await fetch(`${BACKEND_URL}/skills`, {
+          headers: {
+            'accept': '*/*',
+            'origin': window.location.origin,
+            'referer': window.location.href,
+          },
+        });
+        if (!response.ok) throw new Error('Failed to fetch skills');
         const data = await response.json();
+        // Create a mapping of skill_id to skill name
+        const skillMap = data.reduce((acc: SkillMap, skill: SkillData) => ({
+          ...acc,
+          [skill.skill_id]: skill.name
+        }), {});
+        setSkills(skillMap);
+      } catch (error) {
+        console.error('Error fetching skills:', error);
+        setError('Failed to load skills');
+      }
+    };
+
+    fetchSkills();
+  }, []);
+
+  // Use the makeRequest helper for other API calls
+  const makeRequest = async (url: string, options: RequestInit = {}) => {
+    const defaultHeaders = {
+      'accept': '*/*',
+      'origin': window.location.origin,
+      'referer': window.location.href,
+    };
+
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        ...defaultHeaders,
+        ...options.headers,
+      },
+    });
+
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  };
+
+  // Use the makeRequest helper for other API calls
+  useEffect(() => {
+    const fetchProjects = async () => {
+      if (!selectedPeriod) return;
+      setLoading(true);
+      try {
+        const data = await makeRequest(`${BACKEND_URL}/period/${selectedPeriod}/projects`);
         setProjectData(data);
-        setError(null);
-      } catch (err) {
-        setError('Failed to load projects. Please try again.');
-        console.error('Error fetching projects:', err);
+      } catch (error) {
+        console.error('Error fetching projects:', error);
+        setError('Failed to load projects');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchProjectData();
+    fetchProjects();
   }, [selectedPeriod]);
 
   // Fetch contributors when a new skill_id is encountered
@@ -180,28 +222,6 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
       if (skillId) fetchContributorsForSkill(skillId);
     });
   }, [projectData, fetchContributorsForSkill]);
-
-  // Add new useEffect to fetch skills
-  useEffect(() => {
-    const fetchSkills = async () => {
-      try {
-        const response = await fetch(`${BACKEND_URL}/skills`);
-        if (!response.ok) throw new Error('Failed to fetch skills');
-        const data = await response.json();
-        // Create a mapping of skill_id to skill name
-        const skillMap = data.reduce((acc: SkillMap, skill: SkillData) => ({
-          ...acc,
-          [skill.skill_id]: skill.name
-        }), {});
-        setSkills(skillMap);
-      } catch (error: unknown) {
-        console.error('Error fetching skills:', error);
-        setError('Failed to load skills');
-      }
-    };
-
-    fetchSkills();
-  }, []);
 
   const startDate = new Date('2024-02-03');
   const dateHeaders = Array.from({ length: 12 }, (_, i) => {
