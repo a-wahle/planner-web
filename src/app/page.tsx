@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import ViewComponent from '@/components/view-tab/ViewComponent';
 import EngineerView from '@/components/view-tab/EngineerView';
 import CreateForms from '@/components/create-tab/CreateForms';
+import { EngineerData } from '@/types';
 
 const BACKEND_URL = 'https://planner-backend-fz01.onrender.com';
 
@@ -23,6 +24,24 @@ interface Period {
 interface Skill {
   skill_id: number;
   name: string;
+}
+
+// Define the ProjectData interface
+interface ProjectData {
+  projects: Array<{
+    project_id: number;
+    project_name: string;
+    components: Array<{
+      component_id: string;
+      component_name: string;
+      skill_id: string;
+      contributor_id: string | null;
+      contributor_name: string | null;
+      estimated_weeks: number;
+      assigned_weeks: number;
+      assignments: boolean[];
+    }>;
+  }>;
 }
 
 const App = () => {
@@ -45,6 +64,10 @@ const App = () => {
   const [activeTab, setActiveTab] = useState('form');
   const [activeViewTab, setActiveViewTab] = useState('projects');
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
+
+  // Initialize with empty arrays
+  const [projectData, setProjectData] = useState<ProjectData>({ projects: [] });
+  const [engineerData, setEngineerData] = useState<EngineerData>({});
 
   // Load initial values from localStorage on mount
   useEffect(() => {
@@ -134,6 +157,39 @@ const App = () => {
     if (selectedPeriod) {
       localStorage.setItem('selectedPeriod', selectedPeriod);
     }
+  }, [selectedPeriod]);
+
+  // Fetch data when period changes or component mounts
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!selectedPeriod) return;
+      
+      try {
+        setLoading(true);
+        const [projectsResponse, engineersResponse] = await Promise.all([
+          fetch(`${BACKEND_URL}/period/${selectedPeriod}/projects`),
+          fetch(`${BACKEND_URL}/period/${selectedPeriod}/contributor_chart`)
+        ]);
+
+        if (!projectsResponse.ok) throw new Error('Failed to fetch projects');
+        if (!engineersResponse.ok) throw new Error('Failed to fetch engineers');
+        
+        const [projectsData, engineersData] = await Promise.all([
+          projectsResponse.json(),
+          engineersResponse.json()
+        ]);
+        
+        setProjectData(projectsData);
+        setEngineerData(engineersData);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        setError(error instanceof Error ? error.message : 'Failed to load data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
   }, [selectedPeriod]);
 
   const handleSubmit = async (e: React.FormEvent<Element>) => {
@@ -457,6 +513,11 @@ const App = () => {
     }
   };
 
+  // Define the correct dates
+  const dateHeaders = [
+    '2/3', '2/10', '2/17', '2/24', '3/3', '3/10', '3/17', '3/24', '3/31', '4/7', '4/14', '4/21', '4/28'
+  ];
+
   if (loading && formType === 'contributor') {
     return <div className="flex justify-center items-center min-h-screen">Loading skills...</div>;
   }
@@ -542,9 +603,17 @@ const App = () => {
               {activeViewTab === 'projects' ? (
                 <ViewComponent 
                   selectedPeriod={selectedPeriod}
+                  projectData={projectData}
+                  setProjectData={setProjectData}
+                  dateHeaders={dateHeaders}
                 />
               ) : (
-                <EngineerView periodId={selectedPeriod} />
+                <EngineerView 
+                  periodId={selectedPeriod} 
+                  engineerData={engineerData}
+                  setEngineerData={setEngineerData}
+                  dateHeaders={dateHeaders}
+                />
               )}
             </CardContent>
           </Card>

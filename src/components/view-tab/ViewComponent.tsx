@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight, Trash2, MoreVertical } from 'lucide-react';
+import { ChevronDown, ChevronRight, Trash2, MoreVertical, Plus } from 'lucide-react';
 import {
   Popover,
   PopoverContent,
@@ -34,11 +34,27 @@ interface Project {
 }
 
 interface ProjectData {
-  projects: Project[];
+  projects: Array<{
+    project_id: number;
+    project_name: string;
+    components: Array<{
+      component_id: string;
+      component_name: string;
+      skill_id: string;
+      contributor_id: string | null;
+      contributor_name: string | null;
+      estimated_weeks: number;
+      assigned_weeks: number;
+      assignments: boolean[];
+    }>;
+  }>;
 }
 
 interface ViewComponentProps {
   selectedPeriod: string | null;
+  projectData: ProjectData;
+  setProjectData: React.Dispatch<React.SetStateAction<ProjectData>>;
+  dateHeaders: string[];
 }
 
 // Define a type for the contributor skill mapping
@@ -58,9 +74,13 @@ interface SkillData {
 type SkillMap = Record<string, string>;
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
-const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.ReactElement => {
+const ViewComponent: React.FC<ViewComponentProps> = ({ 
+  selectedPeriod, 
+  projectData = { projects: [] },
+  setProjectData,
+  dateHeaders
+}): React.ReactElement => {
   const [expandedProjects, setExpandedProjects] = useState(new Set());
-  const [projectData, setProjectData] = useState<ProjectData>({ projects: [] });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [contributorsBySkill, setContributorsBySkill] = useState<ContributorSkillMap>({});
@@ -173,25 +193,6 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
     return response.json();
   };
 
-  // Use the makeRequest helper for other API calls
-  useEffect(() => {
-    const fetchProjects = async () => {
-      if (!selectedPeriod) return;
-      setLoading(true);
-      try {
-        const data = await makeRequest(`${BACKEND_URL}/period/${selectedPeriod}/projects`);
-        setProjectData(data);
-      } catch (error) {
-        console.error('Error fetching projects:', error);
-        setError('Failed to load projects');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProjects();
-  }, [selectedPeriod]);
-
   // Fetch contributors when a new skill_id is encountered
   const fetchContributorsForSkill = React.useCallback(async (skillId: string) => {
     if (!skillId || contributorsBySkill[skillId]) return;
@@ -223,42 +224,47 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
     });
   }, [projectData, fetchContributorsForSkill]);
 
-  const startDate = new Date('2024-02-03');
-  const dateHeaders = Array.from({ length: 12 }, (_, i) => {
-    const date = new Date(startDate);
-    date.setDate(date.getDate() + i * 7);
-    return `${(date.getMonth() + 1)}/${date.getDate()}`;
-  });
-
   const toggleCell = (componentId: string, weekIndex: number, isAssigned: boolean) => {
     setPendingChanges(prev => {
-      const componentChanges = {
-        added: new Set(prev[componentId]?.added || []),
-        removed: new Set(prev[componentId]?.removed || [])
+      const componentChanges = prev[componentId] || { added: new Set(), removed: new Set() };
+      const newChanges = {
+        added: new Set(componentChanges.added),
+        removed: new Set(componentChanges.removed)
       };
       
       if (isAssigned) {
-        if (componentChanges.removed.has(weekIndex)) {
-          componentChanges.removed.delete(weekIndex);
+        // If it's currently assigned (green)
+        if (newChanges.removed.has(weekIndex)) {
+          // If it's already marked for removal (red), unmark it (back to green)
+          newChanges.removed.delete(weekIndex);
         } else {
-          componentChanges.removed.add(weekIndex);
+          // Mark it for removal (red)
+          newChanges.removed.add(weekIndex);
+          // Ensure it's not in added set
+          newChanges.added.delete(weekIndex);
         }
       } else {
-        if (componentChanges.added.has(weekIndex)) {
-          componentChanges.added.delete(weekIndex);
+        // If it's unassigned (grey)
+        if (newChanges.added.has(weekIndex)) {
+          // If it's already marked for addition (blue), unmark it (back to grey)
+          newChanges.added.delete(weekIndex);
         } else {
-          componentChanges.added.add(weekIndex);
+          // Mark it for addition (blue)
+          newChanges.added.add(weekIndex);
+          // Ensure it's not in removed set
+          newChanges.removed.delete(weekIndex);
         }
       }
 
-      if (componentChanges.added.size === 0 && componentChanges.removed.size === 0) {
+      // If no pending changes, remove the component from pendingChanges
+      if (newChanges.added.size === 0 && newChanges.removed.size === 0) {
         const { [componentId]: _, ...rest } = prev;
         return rest;
       }
 
       return {
         ...prev,
-        [componentId]: componentChanges
+        [componentId]: newChanges
       };
     });
   };
@@ -270,6 +276,40 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
       setError(null);
       const changes = pendingChanges[componentId] || { added: new Set(), removed: new Set() };
       
+      // Optimistically update the UI
+      setProjectData((prevData: ProjectData): ProjectData => {
+        const newData: ProjectData = { ...prevData };
+        const project = newData.projects.find(p => 
+          p.components.some(c => c.component_id === componentId)
+        );
+        
+        if (project) {
+          const component = project.components.find(c => c.component_id === componentId);
+          if (component) {
+            // Create a new assignments array with the changes applied
+            const newAssignments = [...component.assignments];
+            changes.added.forEach(weekIndex => {
+              newAssignments[weekIndex] = true;
+            });
+            changes.removed.forEach(weekIndex => {
+              newAssignments[weekIndex] = false;
+            });
+            
+            // Update the assigned_weeks count
+            component.assigned_weeks = newAssignments.filter(Boolean).length;
+            component.assignments = newAssignments;
+          }
+        }
+        
+        return newData;
+      });
+
+      // Clear pending changes immediately
+      setPendingChanges(prev => {
+        const { [componentId]: _, ...rest } = prev;
+        return rest;
+      });
+
       const response = await fetch(`${BACKEND_URL}/assignment`, {
         method: 'POST',
         headers: {
@@ -288,12 +328,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
         throw new Error(errorData.error || 'Failed to update assignments');
       }
 
-      setPendingChanges(prev => {
-        const newChanges = { ...prev };
-        delete newChanges[componentId];
-        return newChanges;
-      });
-
+      // Still fetch fresh data to ensure consistency
       const refreshResponse = await fetch(`${BACKEND_URL}/period/${selectedPeriod}/projects`);
       if (!refreshResponse.ok) {
         throw new Error('Failed to refresh projects');
@@ -303,6 +338,13 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
     } catch (error: unknown) {
       console.error('Error updating assignments:', error);
       setError(error instanceof Error ? error.message : 'An unknown error occurred');
+      
+      // Revert the optimistic update if there's an error
+      const refreshResponse = await fetch(`${BACKEND_URL}/period/${selectedPeriod}/projects`);
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setProjectData(data);
+      }
     }
   };
 
@@ -531,19 +573,16 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
   };
   /* eslint-enable @typescript-eslint/no-unused-vars */
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        Loading projects...
-      </div>
-    );
-  }
-
   return (
     <div className="w-full h-full min-h-screen bg-white">
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
           <span className="block sm:inline">{error}</span>
+        </div>
+      )}
+      {loading && (
+        <div className="absolute top-4 right-4 text-sm text-gray-500">
+          Refreshing...
         </div>
       )}
       <div className="overflow-x-auto">
@@ -563,6 +602,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
                     </th>
                   ))}
                   <th className="text-center py-4 px-4 font-medium text-sm text-gray-500 w-32">Status</th>
+                  <th className="w-10"></th>
                 </>
               )}
             </tr>
@@ -577,7 +617,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
                   <tr className="border-b hover:bg-gray-50">
                     <td className="py-4 px-4 sticky left-0 bg-white" colSpan={expandedProjects.size > 0 ? dateHeaders.length + 4 : 1}>
                       <div className="flex items-center gap-6">
-                        <div className="flex items-center font-medium min-w-64">
+                        <div className="flex items-center font-medium w-128">
                           <div 
                             className="flex items-center cursor-pointer"
                             onClick={() => toggleProject(project.project_id)}
@@ -587,7 +627,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
                             ) : (
                               <ChevronRight className="w-4 h-4 mr-2" />
                             )}
-                            {project.project_name}
+                            <span className="truncate">{project.project_name}</span>
                           </div>
                           <Popover>
                             <PopoverTrigger asChild>
@@ -599,6 +639,18 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
                               </button>
                             </PopoverTrigger>
                             <PopoverContent className="w-40 p-0" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                onClick={() => setNewComponent({
+                                  projectId: project.project_id.toString(),
+                                  name: '',
+                                  skillId: '',
+                                  estimatedWeeks: ''
+                                })}
+                              >
+                                <Plus className="w-4 h-4" />
+                                Add Component
+                              </button>
                               <button
                                 className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100 flex items-center gap-2"
                                 onClick={() => deleteProject(project.project_id.toString())}
@@ -612,21 +664,10 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
                         {!isExpanded && (
                           <div className="flex gap-4 text-sm">
                             {summary.componentSummaries.map((compSummary, index) => (
-                              <div key={index} className="flex items-center gap-2">
-                                <span className="px-2 py-1 rounded bg-gray-100">
-                                  {compSummary.name}
-                                </span>
-                                <span className="px-2 py-1 rounded bg-gray-100">
-                                  {compSummary.engineer || 'Unassigned'}
-                                </span>
-                                <span className={`px-2 py-1 rounded ${compSummary.statusColor}`}>
-                                  {compSummary.scheduledWeeks}/{compSummary.estimatedWeeks}
-                                </span>
+                              <div key={index} className={`px-2 py-1 rounded ${compSummary.statusColor}`}>
+                                {compSummary.name} • {compSummary.engineer || 'Unassigned'} • {compSummary.scheduledWeeks}/{compSummary.estimatedWeeks}
                               </div>
                             ))}
-                            <span className={`px-2 py-1 rounded ${summary.statusColor}`}>
-                              {Math.round(summary.percentage)}%
-                            </span>
                           </div>
                         )}
                       </div>
@@ -673,7 +714,7 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
                                   ) : (
                                     <button
                                       onClick={() => clearAssignments(component.component_id)}
-                                      className="px-2 py-1 bg-red-500 text-white rounded text-sm w-full"
+                                      className="px-2 py-1 bg-white text-blue-500 border border-blue-500 rounded text-sm w-full hover:bg-blue-50"
                                     >
                                       Clear
                                     </button>
@@ -682,19 +723,24 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
                               </div>
                             </div>
                           </td>
-                          {component.assignments.map((isAssigned, index) => (
-                            <td 
-                              key={index} 
-                              className={`text-center py-4 px-2 cursor-pointer ${
-                                pendingChanges[component.component_id]?.removed.has(index) ? 'bg-red-100' :
-                                pendingChanges[component.component_id]?.added.has(index) ? 'bg-green-100' :
-                                isAssigned ? 'bg-gray-100' : ''
-                              }`}
-                              onClick={() => toggleCell(component.component_id, index, isAssigned)}
-                            >
-                              {isAssigned ? '✓' : ''}
-                            </td>
-                          ))}
+                          {Array.from({ length: dateHeaders.length }).map((_, index) => {
+                            const isAssigned = component.assignments[index];
+                            const isPendingAdd = pendingChanges[component.component_id]?.added.has(index);
+                            const isPendingRemove = pendingChanges[component.component_id]?.removed.has(index);
+                            
+                            return (
+                              <td 
+                                key={index} 
+                                className={`text-center py-4 px-2 cursor-pointer border border-gray-200 ${
+                                  isPendingAdd ? 'bg-blue-100' :
+                                  isPendingRemove ? 'bg-red-100' :
+                                  isAssigned ? 'bg-green-100' : 
+                                  'bg-white'
+                                }`}
+                                onClick={() => toggleCell(component.component_id, index, isAssigned)}
+                              >{''}</td>
+                            );
+                          })}
                           <td className="text-center py-4 px-4">
                             {Math.round((component.assigned_weeks / component.estimated_weeks) * 100)}%
                           </td>
@@ -711,57 +757,65 @@ const ViewComponent: React.FC<ViewComponentProps> = ({ selectedPeriod }): React.
                     </tr>
                   ))}
                   {isExpanded && (
-                    <tr className="border-b bg-gray-50">
-                      <td colSpan={dateHeaders.length + 4} className="py-4 px-4">
-                        <div className="flex items-center gap-4">
-                          <input
-                            type="text"
-                            placeholder="Component Name"
-                            className="px-2 py-1 border rounded"
-                            value={newComponent?.projectId === project.project_id.toString() ? newComponent.name : ''}
-                            onChange={(e) => setNewComponent(prev => ({
-                              projectId: project.project_id.toString(),
-                              name: e.target.value,
-                              skillId: prev?.skillId || '',
-                              estimatedWeeks: prev?.estimatedWeeks || ''
-                            }))}
-                          />
-                          <select
-                            className="px-2 py-1 border rounded"
-                            value={newComponent?.projectId === project.project_id.toString() ? newComponent.skillId : ''}
-                            onChange={(e) => setNewComponent(prev => ({
-                              projectId: project.project_id.toString(),
-                              skillId: e.target.value,
-                              name: prev?.name || '',
-                              estimatedWeeks: prev?.estimatedWeeks || ''
-                            }))}
-                          >
-                            <option value="">Select Skill</option>
-                            {Object.entries(skills).map(([id, name]) => (
-                              <option key={id} value={id}>{name}</option>
-                            ))}
-                          </select>
-                          <input
-                            type="number"
-                            placeholder="Estimated Weeks"
-                            className="px-2 py-1 border rounded w-32"
-                            value={newComponent?.projectId === project.project_id.toString() ? (newComponent.estimatedWeeks || '') : ''}
-                            onChange={(e) => setNewComponent(prev => ({
-                              projectId: project.project_id.toString(),
-                              estimatedWeeks: e.target.value,
-                              name: prev?.name || '',
-                              skillId: prev?.skillId || ''
-                            }))}
-                          />
-                          <button
-                            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                            onClick={() => addComponent(project.project_id.toString())}
-                          >
-                            Add Component
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                    newComponent?.projectId === project.project_id.toString() && (
+                      <tr className="border-b bg-gray-50">
+                        <td colSpan={dateHeaders.length + 4} className="py-2 px-4">
+                          <div className="flex items-center gap-4">
+                            <input
+                              type="text"
+                              placeholder="Component Name"
+                              className="px-2 py-1 border rounded"
+                              value={newComponent.name}
+                              onChange={(e) => setNewComponent(prev => ({
+                                projectId: project.project_id.toString(),
+                                name: e.target.value,
+                                skillId: prev?.skillId || '',
+                                estimatedWeeks: prev?.estimatedWeeks || ''
+                              }))}
+                            />
+                            <select
+                              className="px-2 py-1 border rounded"
+                              value={newComponent.skillId}
+                              onChange={(e) => setNewComponent(prev => ({
+                                projectId: project.project_id.toString(),
+                                skillId: e.target.value,
+                                name: prev?.name || '',
+                                estimatedWeeks: prev?.estimatedWeeks || ''
+                              }))}
+                            >
+                              <option value="">Select Skill</option>
+                              {Object.entries(skills).map(([id, name]) => (
+                                <option key={id} value={id}>{name}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="number"
+                              placeholder="Estimated Weeks"
+                              className="px-2 py-1 border rounded w-32"
+                              value={newComponent.estimatedWeeks}
+                              onChange={(e) => setNewComponent(prev => ({
+                                projectId: project.project_id.toString(),
+                                estimatedWeeks: e.target.value,
+                                name: prev?.name || '',
+                                skillId: prev?.skillId || ''
+                              }))}
+                            />
+                            <button
+                              className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                              onClick={() => addComponent(project.project_id.toString())}
+                            >
+                              Save
+                            </button>
+                            <button
+                              className="px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm"
+                              onClick={() => setNewComponent(null)}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
                   )}
                 </React.Fragment>
               );
